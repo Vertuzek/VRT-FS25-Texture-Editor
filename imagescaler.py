@@ -158,7 +158,6 @@ if __name__ == "__main__":
 
     root = TkinterDnD.Tk()
 
-    # Initialize CustomTkinter AFTER root exists
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
 
@@ -170,5 +169,6 @@ if __name__ == "__main__":
 
     app = TileResizerApp(root)
 
-    root.update()   # <-- Forces widget draw (important)
+    root.update()
     root.mainloop()
+
