@@ -4,7 +4,7 @@ ImageScaler is a desktop GUI app (CustomTkinter) that loads an image and creates
 
 ## Features
 
-- Load image from file dialog (`.png`, `.jpg`, `.jpeg`)
+- Load image from file dialog (`.png`, `.jpg`, `.jpeg`, `.dds`)
 - Optional drag-and-drop support (depends on `tkinterdnd2` / `tkdnd` availability)
 - Generate tiled preview in-app
 - Save output as PNG or JPEG
@@ -40,6 +40,16 @@ Build (windowed, one-folder):
 
 ```powershell
 python -m PyInstaller --noconfirm --windowed --name ImageScaler --collect-all customtkinter --collect-all tkinterdnd2 imagescaler.py
+```
+
+Output executable:
+
+- `dist/ImageScaler/ImageScaler.exe`
+
+Build (windowed, one-file):
+
+```powershell
+python -m PyInstaller --noconfirm --onefile --windowed --name ImageScaler --collect-all customtkinter --collect-all tkinterdnd2 imagescaler.py
 ```
 
 Output executable:
