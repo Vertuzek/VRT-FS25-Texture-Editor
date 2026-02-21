@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
+import os
 
 
 
@@ -19,6 +20,9 @@ class TileResizerApp:
         self.tiled_result = None
         self.preview_img = None
         self.atlas_result = None
+        self.input_path = None
+        self.input_ext = None
+        self.input_dds_format = None
         
         # Atlas data: list of dicts with 'image' and 'scale'
         self.atlas_slots = [
@@ -55,8 +59,10 @@ class TileResizerApp:
         self.multiplier_entry.pack(fill="x", pady=5)
         self.multiplier_entry.bind("<KeyRelease>", lambda e: self.schedule_preview_update())
 
-        self.save_btn = ctk.CTkButton(self.left_frame, text="Save Image", command=self.save_image)
-        self.save_btn.pack(pady=5, fill="x")
+        self.register_drop_target(self.single_title, self.on_single_section_drop)
+        self.register_drop_target(self.load_btn, self.on_single_section_drop)
+        self.register_drop_target(self.multiplier_label, self.on_single_section_drop)
+        self.register_drop_target(self.multiplier_entry, self.on_single_section_drop)
 
         # ===== ATLAS CREATION =====
         self.atlas_separator = ctk.CTkLabel(self.left_frame, text="─" * 35)
@@ -79,6 +85,9 @@ class TileResizerApp:
 
         self.clear_atlas_btn = ctk.CTkButton(self.left_frame, text="Clear All Slots", command=self.clear_atlas)
         self.clear_atlas_btn.pack(pady=2, fill="x")
+
+        self.save_btn = ctk.CTkButton(self.left_frame, text="Save Image", command=self.save_image)
+        self.save_btn.pack(pady=(14, 5), fill="x")
 
         # ===== Preview Canvas =====
         self.canvas = ctk.CTkCanvas(
@@ -132,6 +141,13 @@ class TileResizerApp:
             hover_color="#A52A2A"
         )
         clear_btn.pack(pady=(3, 8), fill="x", padx=10)
+
+        self.register_drop_target(frame, lambda e, idx=slot_index: self.on_slot_section_drop(e, idx))
+        self.register_drop_target(title, lambda e, idx=slot_index: self.on_slot_section_drop(e, idx))
+        self.register_drop_target(status_label, lambda e, idx=slot_index: self.on_slot_section_drop(e, idx))
+        self.register_drop_target(load_btn, lambda e, idx=slot_index: self.on_slot_section_drop(e, idx))
+        self.register_drop_target(scale_label, lambda e, idx=slot_index: self.on_slot_section_drop(e, idx))
+        self.register_drop_target(scale_entry, lambda e, idx=slot_index: self.on_slot_section_drop(e, idx))
         
         # Store references
         self.slot_frames.append(frame)
@@ -141,7 +157,7 @@ class TileResizerApp:
     # ---------- Single Image Load ----------
     def load_image(self):
         path = filedialog.askopenfilename(
-            filetypes=[("Images", "*.png *.jpg *.jpeg")]
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.dds")]
         )
 
         if path:
@@ -149,38 +165,118 @@ class TileResizerApp:
 
     def open_image(self, path):
         try:
+            self.input_path = path
+            self.input_ext = os.path.splitext(path)[1].lower()
+            self.input_dds_format = self.detect_dds_pixel_format(path) if self.input_ext == ".dds" else None
             self.image = Image.open(path).convert("RGBA")
             self.tiled_result = None
             self.auto_generate_preview()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
+    def register_drop_target(self, widget, handler):
+        try:
+            widget.drop_target_register(DND_FILES)
+            widget.dnd_bind("<<Drop>>", handler)
+        except Exception:
+            pass
+
+    def get_first_supported_path(self, event_data):
+        paths = self.parse_dnd_paths(event_data)
+        if not paths:
+            return None
+
+        path = paths[0]
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in {".png", ".jpg", ".jpeg", ".dds"}:
+            messagebox.showwarning("Unsupported File", "Please drop a PNG, JPG, JPEG, or DDS file.")
+            return None
+
+        return path
+
+    def on_single_section_drop(self, event):
+        path = self.get_first_supported_path(event.data)
+        if path:
+            self.open_image(path)
+
+    def on_slot_section_drop(self, event, slot_index):
+        path = self.get_first_supported_path(event.data)
+        if path:
+            self.open_atlas_slot_image(slot_index, path)
+
+    def parse_dnd_paths(self, raw_data):
+        try:
+            return list(self.root.tk.splitlist(raw_data))
+        except Exception:
+            return [raw_data]
+
+    def detect_dds_pixel_format(self, path):
+        try:
+            with open(path, "rb") as file:
+                header = file.read(132)
+
+            if len(header) < 128 or header[:4] != b"DDS ":
+                return None
+
+            fourcc = header[84:88]
+
+            fourcc_map = {
+                b"DXT1": "DXT1",
+                b"DXT3": "DXT3",
+                b"DXT5": "DXT5",
+                b"ATI1": "ATI1",
+                b"ATI2": "ATI2",
+                b"BC4U": "ATI1",
+                b"BC5U": "ATI2",
+            }
+            if fourcc in fourcc_map:
+                return fourcc_map[fourcc]
+
+            if fourcc == b"DX10" and len(header) >= 132:
+                dxgi_format = int.from_bytes(header[128:132], byteorder="little", signed=False)
+                dxgi_map = {
+                    71: "DXT1",  # BC1_UNORM
+                    72: "DXT1",  # BC1_UNORM_SRGB
+                    74: "DXT3",  # BC2_UNORM
+                    75: "DXT3",  # BC2_UNORM_SRGB
+                    77: "DXT5",  # BC3_UNORM
+                    78: "DXT5",  # BC3_UNORM_SRGB
+                    80: "ATI1",  # BC4_UNORM
+                    83: "ATI2",  # BC5_UNORM
+                }
+                return dxgi_map.get(dxgi_format)
+        except Exception:
+            return None
+
+        return None
     
     # ---------- Atlas Slot Management ----------
     def load_atlas_slot(self, slot_index):
         """Load or replace an image in a specific atlas slot"""
         path = filedialog.askopenfilename(
-            filetypes=[("Images", "*.png *.jpg *.jpeg")]
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.dds")]
         )
         
         if path:
-            try:
-                img = Image.open(path).convert("RGBA")
-                self.atlas_slots[slot_index]['image'] = img
-                
-                # Update UI
-                filename = path.split('/')[-1].split('\\')[-1]
-                if len(filename) > 20:
-                    filename = filename[:17] + "..."
-                self.slot_labels[slot_index].configure(
-                    text=filename,
-                    text_color="#00FF00"
-                )
-                
-                # Auto-generate atlas after loading
-                self.auto_generate_atlas()
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load image: {str(e)}")
+            self.open_atlas_slot_image(slot_index, path)
+
+    def open_atlas_slot_image(self, slot_index, path):
+        try:
+            img = Image.open(path).convert("RGBA")
+            self.atlas_slots[slot_index]['image'] = img
+
+            filename = path.split('/')[-1].split('\\')[-1]
+            if len(filename) > 20:
+                filename = filename[:17] + "..."
+            self.slot_labels[slot_index].configure(
+                text=filename,
+                text_color="#00FF00"
+            )
+
+            self.auto_generate_atlas()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load image: {str(e)}")
     
     def clear_atlas_slot(self, slot_index):
         """Clear a specific atlas slot"""
@@ -268,13 +364,26 @@ class TileResizerApp:
             messagebox.showwarning("Nothing to Save", "Generate preview first.")
             return
 
+        default_ext = ".dds" if self.input_ext == ".dds" else ".png"
         path = filedialog.asksaveasfilename(
-            defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")]
+            defaultextension=default_ext,
+            filetypes=[("DDS", "*.dds"), ("PNG", "*.png"), ("JPEG", "*.jpg")]
         )
 
         if path:
-            self.tiled_result.convert("RGB").save(path)
+            ext = os.path.splitext(path)[1].lower()
+
+            if ext == ".dds":
+                save_format = self.input_dds_format or "DXT5"
+                try:
+                    self.tiled_result.save(path, format="DDS", pixel_format=save_format)
+                except TypeError:
+                    self.tiled_result.save(path, format="DDS")
+            elif ext in {".jpg", ".jpeg"}:
+                self.tiled_result.convert("RGB").save(path)
+            else:
+                self.tiled_result.save(path)
+
             messagebox.showinfo("Saved", "Image saved successfully.")
 
     # ---------- Atlas Creation ----------
