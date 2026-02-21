@@ -1,13 +1,33 @@
-# ImageScaler
+# vrtFS25TextureEditor
 
-ImageScaler is a desktop GUI app (CustomTkinter) that loads an image and creates a tiled version by repeating it using a numeric multiplier.
+Desktop texture tool (CustomTkinter) for FS25 workflows: single tiling, multi-atlas creation, and specular-map generation.
 
-## Features
+## Main Features
 
-- Load image from file dialog (`.png`, `.jpg`, `.jpeg`, `.dds`)
-- Optional drag-and-drop support (depends on `tkinterdnd2` / `tkdnd` availability)
-- Generate tiled preview in-app
-- Save output as PNG or JPEG
+- **Single tab**
+	- Load one image (`.png`, `.jpg`, `.jpeg`, `.dds`)
+	- Set tiling multiplier and preview result
+	- Save output image
+
+- **Multi Atlas tab**
+	- 4 atlas groups, each with up to 4 slots
+	- Per-slot scale multiplier
+	- Per-slot **Blank Image (Alpha)** toggle
+	- Collapsible atlas groups + Expand/Collapse all
+	- Per-group **Save Atlas X** button
+	- Atlas project save/load (embedded image data)
+
+- **Specular Gen tab**
+	- Inputs:
+		- Roughness -> Red channel
+		- Ambient Occlusion -> Green channel
+		- Metalness -> Blue channel
+	- Optional **Invert Roughness**
+	- Optional **No Metalness (use black)**
+
+- **DDS Save Options**
+	- Select DDS format label (BC1/BC2/BC3/BC4/BC5 variants)
+	- Optional **Generate Mipmaps** checkbox
 
 ## Requirements
 
@@ -25,8 +45,19 @@ python -m pip install -r requirements.txt
 From this folder:
 
 ```powershell
-python imagescaler.py
+python vrtFS25TextureEditor.py
 ```
+
+## Atlas Project Files
+
+- Save from the icon button in preview area (visible on **Multi Atlas** tab)
+- Load from the folder icon button
+- Project file format: `.atlasproj` (JSON)
+- Stored data includes:
+	- target atlas width
+	- each slot scale
+	- each slot blank-alpha state
+	- embedded slot images (base64 PNG)
 
 ## Build EXE (PyInstaller)
 
@@ -39,23 +70,16 @@ python -m pip install pyinstaller
 Build (windowed, one-folder):
 
 ```powershell
-python -m PyInstaller --noconfirm --windowed --name ImageScaler --collect-all customtkinter --collect-all tkinterdnd2 imagescaler.py
+python -m PyInstaller --noconfirm --windowed --name vrtFS25TextureEditor --collect-all customtkinter --collect-all tkinterdnd2 vrtFS25TextureEditor.py
 ```
-
-Output executable:
-
-- `dist/ImageScaler/ImageScaler.exe`
 
 Build (windowed, one-file):
 
 ```powershell
-python -m PyInstaller --noconfirm --onefile --windowed --name ImageScaler --collect-all customtkinter --collect-all tkinterdnd2 imagescaler.py
+python -m PyInstaller --noconfirm --onefile --windowed --name vrtFS25TextureEditor --collect-all customtkinter --collect-all tkinterdnd2 vrtFS25TextureEditor.py
 ```
 
-Output executable:
+## Notes
 
-- `dist/ImageScaler/ImageScaler.exe`
-
-## Notes about drag-and-drop
-
-If `tkdnd` is not available in your Python/Tk setup, the app still runs and shows a fallback message in the drag-drop area. The **Load Image** button will continue to work normally.
+- Drag-and-drop depends on `tkinterdnd2` / `tkdnd` support in your environment.
+- If a selected DDS option is not supported by the underlying PIL DDS backend, save falls back to default DDS behavior.
